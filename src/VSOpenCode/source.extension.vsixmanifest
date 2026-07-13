@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="VSOpenCode.a1b2c3d4-e5f6-7890-abcd-ef1234567890" Version="1.0.0" Language="en-US" Publisher="HKLab" />
+    <Identity Id="VSOpenCode.a1b2c3d4-e5f6-7890-abcd-ef1234567890" Version="1.0.1" Language="en-US" Publisher="HKLab" />
     <DisplayName>Visual Studio OpenCode</DisplayName>
     <Description xml:space="preserve">Integrates OpenCode AI coding assistant into Visual Studio. Provides a WebView2 tool window to interact with OpenCode directly from the IDE.</Description>
     <Icon>Resources\Icon.png</Icon>

@@ -90,10 +90,6 @@ namespace VSOpenCode
                 _serverController.TryAcquire(toolWindow);
                 await toolWindow.Control.StartAsync();
             }
-            else
-            {
-                await ShowOpenCodeWindowAsync();
-            }
         }
 
         protected override void Dispose(bool disposing)
