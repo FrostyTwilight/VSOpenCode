@@ -59,6 +59,8 @@ namespace VSOpenCode.Services
                     return false;
                 }
 
+                var serverPassword = ServerPasswordManager.GeneratePassword();
+
                 var psi = new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = opencodePath,
@@ -69,6 +71,7 @@ namespace VSOpenCode.Services
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
+                psi.EnvironmentVariables["OPENCODE_SERVER_PASSWORD"] = serverPassword;
 
                 _process = System.Diagnostics.Process.Start(psi);
                 if (_process == null)
@@ -255,11 +258,10 @@ namespace VSOpenCode.Services
             _httpClient?.Dispose();
             _httpClient = CreateHttpClient(_serverInfo);
 
-            var password = Environment.GetEnvironmentVariable("OPENCODE_SERVER_PASSWORD");
+            var password = ServerPasswordManager.GeneratePassword();
             if (!string.IsNullOrEmpty(password))
             {
-                var username = Environment.GetEnvironmentVariable("OPENCODE_SERVER_USERNAME") ?? "opencode";
-                var auth = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}"));
+                var auth = Convert.ToBase64String(Encoding.UTF8.GetBytes($"opencode:{password}"));
                 _httpClient.DefaultRequestHeaders.Authorization =
                     new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", auth);
             }
