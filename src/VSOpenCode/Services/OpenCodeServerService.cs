@@ -229,6 +229,13 @@ namespace VSOpenCode.Services
                 using (var client = CreateHttpClient(info))
                 {
                     client.Timeout = TimeSpan.FromSeconds(3);
+                    var pw = _serverPassword;
+                    if (!string.IsNullOrEmpty(pw))
+                    {
+                        var auth = Convert.ToBase64String(Encoding.UTF8.GetBytes($"opencode:{pw}"));
+                        client.DefaultRequestHeaders.Authorization =
+                            new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", auth);
+                    }
                     var response = await client.GetAsync("/global/health");
                     if (response.IsSuccessStatusCode)
                     {
