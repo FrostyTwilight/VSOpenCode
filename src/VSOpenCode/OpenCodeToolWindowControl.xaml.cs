@@ -1,9 +1,12 @@
+using Microsoft.VisualStudio.PlatformUI;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -25,7 +28,8 @@ namespace VSOpenCode
         [ClassInterface(ClassInterfaceType.AutoDual)]
         [ComVisible(true)]
         public class WebView2HostBridge(
-            Func<string> getWorktree
+            Func<string> getWorktree,
+            Func<string> getThemeColors
             )
         {
             public string GetWorktree()
@@ -36,6 +40,10 @@ namespace VSOpenCode
             {
                 
                 return BitConverter.ToString(SHA256.Create().ComputeHash(Encoding.UTF8.GetBytes(getWorktree()))).Replace("-", "");
+            }
+            public string GetThemeColors()
+            {
+                return getThemeColors();
             }
         }
 
@@ -52,6 +60,7 @@ namespace VSOpenCode
         private bool _retryDisabled;
         private bool _isShowingError;
         private System.Threading.Timer _projRootTimer;
+        private bool _themeChangeSubscribed;
 
         private static readonly string ErrorPageTemplate;
         private static readonly string LoadingPageTemplate;
@@ -104,6 +113,106 @@ namespace VSOpenCode
             _currentProjectRoot = root;
         }
 
+        private Dictionary<string, string> GetThemeColors()
+        {
+            var colors = new Dictionary<string, string>();
+            try
+            {
+                // Backgrounds
+                colors["bg"] = ToHtml(VSColorTheme.GetThemedColor(EnvironmentColors.ToolWindowBackgroundColorKey));
+                colors["bgPanel"] = ToHtml(VSColorTheme.GetThemedColor(EnvironmentColors.ToolWindowTabGradientBeginColorKey));
+                colors["bgContent"] = ToHtml(VSColorTheme.GetThemedColor(EnvironmentColors.ToolWindowContentGridColorKey));
+                colors["bgInput"] = ToHtml(VSColorTheme.GetThemedColor(EnvironmentColors.ComboBoxBackgroundColorKey));
+                colors["bgSurface"] = ToHtml(VSColorTheme.GetThemedColor(EnvironmentColors.CommandBarGradientBeginColorKey));
+                // Text
+                colors["textPrimary"] = ToHtml(VSColorTheme.GetThemedColor(EnvironmentColors.ToolWindowTextColorKey));
+                colors["textSecondary"] = ToHtml(VSColorTheme.GetThemedColor(EnvironmentColors.CommandBarTextInactiveColorKey));
+                colors["textInput"] = ToHtml(VSColorTheme.GetThemedColor(EnvironmentColors.ComboBoxTextColorKey));
+                // Accent & Selection
+                colors["textAccent"] = ToHtml(VSColorTheme.GetThemedColor(EnvironmentColors.AccentBorderColorKey));
+                colors["bgSelected"] = ToHtml(VSColorTheme.GetThemedColor(EnvironmentColors.CommandBarSelectedColorKey));
+                colors["bgHover"] = ToHtml(VSColorTheme.GetThemedColor(EnvironmentColors.CommandBarHoverOverSelectedColorKey));
+                // Borders & Scrollbar
+                colors["border"] = ToHtml(VSColorTheme.GetThemedColor(EnvironmentColors.ToolWindowBorderColorKey));
+                colors["scrollbar"] = ToHtml(VSColorTheme.GetThemedColor(EnvironmentColors.ScrollBarThumbBackgroundColorKey));
+            }
+            catch { }
+            return colors;
+        }
+
+        private string GetThemeColorsJson()
+        {
+            return JsonConvert.SerializeObject(GetThemeColors());
+        }
+
+        private string GetThemeStyleBlock()
+        {
+            var c = GetThemeColors();
+            string bg   = c.TryGetValue("bg", out var v0) ? v0 : "#252526";
+            string text = c.TryGetValue("textPrimary", out var v1) ? v1 : "#f1f1f1";
+            string textMuted = c.TryGetValue("textSecondary", out var v2) ? v2 : "#999999";
+            string accent = c.TryGetValue("textAccent", out var v3) ? v3 : "#007acc";
+            string border = c.TryGetValue("border", out var v4) ? v4 : "#434346";
+            var accentHover = LighterHex(accent, 0.20);
+            var spinnerTrack = LighterHex(bg, 0.12);
+
+            return $@"<style id=""vscode-page-theme"">
+    :root {{
+        --vs-bg: {bg};
+        --vs-text: {text};
+        --vs-text-muted: {textMuted};
+        --vs-accent: {accent};
+        --vs-accent-hover: {accentHover};
+        --vs-border: {border};
+        --vs-spinner-track: {spinnerTrack};
+    }}
+</style>";
+        }
+
+        private static string LighterHex(string hex, double amount)
+        {
+            try
+            {
+                int r = Convert.ToInt32(hex.Substring(1, 2), 16);
+                int g = Convert.ToInt32(hex.Substring(3, 2), 16);
+                int b = Convert.ToInt32(hex.Substring(5, 2), 16);
+                r = Math.Min(255, (int)(r + (255 - r) * amount));
+                g = Math.Min(255, (int)(g + (255 - g) * amount));
+                b = Math.Min(255, (int)(b + (255 - b) * amount));
+                return $"#{r:X2}{g:X2}{b:X2}";
+            }
+            catch { return hex; }
+        }
+
+        private static string ToHtml(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+
+        private void SubscribeThemeChanged()
+        {
+            if (_themeChangeSubscribed) return;
+            _themeChangeSubscribed = true;
+            VSColorTheme.ThemeChanged += OnVSThemeChanged;
+        }
+
+        private void OnVSThemeChanged(ThemeChangedEventArgs e)
+        {
+            _ = ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                try
+                {
+                    if (webView?.CoreWebView2 != null)
+                    {
+                        await webView.CoreWebView2.ExecuteScriptAsync(
+                            "window.__vscode_onThemeChange && window.__vscode_onThemeChange()");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Theme change notify failed: {ex}");
+                }
+            });
+        }
+
         private async Task InitWebViewCoreAsync()
         {
             try
@@ -129,6 +238,8 @@ namespace VSOpenCode
                 webView.CoreWebView2.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All, CoreWebView2WebResourceRequestSourceKinds.All);
                 webView.CoreWebView2.WebResourceRequested += CoreWebView2_WebResourceRequested;
 
+                SubscribeThemeChanged();
+
                 await ShowLoadingPageAsync(StringsHelper.UILoading);
             }
             catch (Exception ex)
@@ -142,7 +253,8 @@ namespace VSOpenCode
         private void CoreWebView2_ContentLoading(object sender, CoreWebView2ContentLoadingEventArgs e)
         {
             webView.CoreWebView2.AddHostObjectToScript("vsoc", new WebView2HostBridge(
-                   () => _currentProjectRoot
+                   () => _currentProjectRoot,
+                   () => GetThemeColorsJson()
                    ));
         }
 
@@ -433,7 +545,9 @@ namespace VSOpenCode
 
         private async Task ShowLoadingPageAsync(string message)
         {
-            var html = LoadingPageTemplate.Replace("{message}", message);
+            var html = LoadingPageTemplate
+                .Replace("{theme-style}", GetThemeStyleBlock())
+                .Replace("{message}", message);
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
             if (webView.CoreWebView2 != null)
             {
@@ -454,6 +568,7 @@ namespace VSOpenCode
                 : "";
 
             var html = ErrorPageTemplate
+                .Replace("{theme-style}", GetThemeStyleBlock())
                 .Replace("{message}", escapedMessage)
                 .Replace("{retryButton}", retryButton)
                 .Replace("{retryScript}", retryScript);
@@ -470,6 +585,11 @@ namespace VSOpenCode
             if (_isDisposed) return;
             _isDisposed = true;
             _projRootTimer?.Dispose();
+            if (_themeChangeSubscribed)
+            {
+                _themeChangeSubscribed = false;
+                VSColorTheme.ThemeChanged -= OnVSThemeChanged;
+            }
             webView?.Dispose();
         }
     }

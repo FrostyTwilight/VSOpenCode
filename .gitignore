@@ -365,3 +365,5 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+/.playwright-mcp
+*.png
