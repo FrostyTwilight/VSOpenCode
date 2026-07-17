@@ -318,7 +318,13 @@ export class ServerService {
 
 		let proc: ChildProcess;
 		try {
-			proc = cp.spawn(opencodePath, ["serve"], spawnOpts);
+			if (process.platform === "win32" && opencodePath.endsWith(".cmd")) {
+				// .cmd files are shell scripts, not PE executables.
+				// Use cmd.exe /c to launch them without shell: true (avoids visible popup).
+				proc = cp.spawn("cmd.exe", ["/c", opencodePath, "serve"], spawnOpts);
+			} else {
+				proc = cp.spawn(opencodePath, ["serve"], spawnOpts);
+			}
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : String(err);
 			console.error(`[OpenCode] spawn failed: ${msg}`);

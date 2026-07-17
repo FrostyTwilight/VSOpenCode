@@ -369,7 +369,11 @@ var ServerService = class {
     };
     let proc;
     try {
-      proc = cp.spawn(opencodePath, ["serve"], spawnOpts);
+      if (process.platform === "win32" && opencodePath.endsWith(".cmd")) {
+        proc = cp.spawn("cmd.exe", ["/c", opencodePath, "serve"], spawnOpts);
+      } else {
+        proc = cp.spawn(opencodePath, ["serve"], spawnOpts);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[OpenCode] spawn failed: ${msg}`);
