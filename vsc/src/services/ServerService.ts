@@ -110,19 +110,19 @@ export class ServerService {
 			.getConfiguration("vscode-opencode")
 			.get<string>("opencodePath");
 		if (configured && configured.trim().length > 0) {
-			return configured.trim();
+			return this._resolveCmdToExe(configured.trim());
 		}
 
 		// 2. Shell lookup via where / which
 		const shellPath = this._shellLookup();
 		if (shellPath) {
-			return shellPath;
+			return this._resolveCmdToExe(shellPath);
 		}
 
 		// 3. Platform fallback paths
 		const fallbackPath = this._findFallbackPath();
 		if (fallbackPath) {
-			return fallbackPath;
+			return this._resolveCmdToExe(fallbackPath);
 		}
 
 		throw new Error(
@@ -130,6 +130,26 @@ export class ServerService {
 				"Set 'vscode-opencode.opencodePath' in your VS Code settings, " +
 				"or ensure opencode is on your PATH.",
 		);
+	}
+
+	/**
+	 * On Windows, if `resolvedPath` is a `.cmd` wrapper script, resolve it to
+	 * the underlying `.exe` so we can spawn it directly without `cmd.exe /c`
+	 * (which pops a console window).
+	 */
+	private _resolveCmdToExe(resolvedPath: string): string {
+		if (process.platform !== "win32" || !resolvedPath.endsWith(".cmd")) {
+			return resolvedPath;
+		}
+		const exePath = this._resolveExeFromCmd(resolvedPath);
+		if (exePath) {
+			console.log(`[OpenCode] Resolved .cmd wrapper to: ${exePath}`);
+			return exePath;
+		}
+		console.log(
+			`[OpenCode] Could not parse .cmd file, falling back to: ${resolvedPath}`,
+		);
+		return resolvedPath;
 	}
 
 	/**
@@ -255,6 +275,45 @@ export class ServerService {
 		return null;
 	}
 
+	/**
+	 * Parse a `.cmd` wrapper script to find the underlying `.exe` path.
+	 *
+	 * Typical npm global `.cmd` files contain a line like:
+	 * ```
+	 * "%dp0%\node_modules\opencode-ai\bin\opencode.exe"   %*
+	 * ```
+	 * where `dp0` is the directory containing the `.cmd` file.
+	 *
+	 * @returns The resolved `.exe` path, or `null` if it couldn't be found.
+	 */
+	private _resolveExeFromCmd(cmdPath: string): string | null {
+		try {
+			const fd = fs.openSync(cmdPath, "r");
+			const buf = Buffer.alloc(500);
+			const bytesRead = fs.readSync(fd, buf, 0, 500, 0);
+			fs.closeSync(fd);
+
+			const content = buf.toString("utf-8", 0, bytesRead);
+			const lines = content.split(/\r?\n/);
+
+			const pattern = /"%dp0%[\\/](.+?)"/;
+			for (const line of lines) {
+				const match = pattern.exec(line);
+				if (match) {
+					const relativePath = match[1]!;
+					const resolved = path.join(path.dirname(cmdPath), relativePath);
+					if (fs.existsSync(resolved)) {
+						return resolved;
+					}
+				}
+			}
+
+			return null;
+		} catch {
+			return null;
+		}
+	}
+
 	// -----------------------------------------------------------------------
 	// start
 	// -----------------------------------------------------------------------
@@ -318,13 +377,7 @@ export class ServerService {
 
 		let proc: ChildProcess;
 		try {
-			if (process.platform === "win32" && opencodePath.endsWith(".cmd")) {
-				// .cmd files are shell scripts, not PE executables.
-				// Use cmd.exe /c to launch them without shell: true (avoids visible popup).
-				proc = cp.spawn("cmd.exe", ["/c", opencodePath, "serve"], spawnOpts);
-			} else {
-				proc = cp.spawn(opencodePath, ["serve"], spawnOpts);
-			}
+			proc = cp.spawn(opencodePath, ["serve"], spawnOpts);
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : String(err);
 			console.error(`[OpenCode] spawn failed: ${msg}`);
