@@ -1,0 +1,8 @@
+{
+  "command.openToolWindow": "Open Tool Window",
+  "viewContainer.title": "OpenCode",
+  "view.toolView": "OpenCode",
+  "config.opencodePath": "Path to the opencode executable. Leave empty to auto-detect.",
+  "config.serverPort": "Port for the OpenCode server. Set to 0 for automatic port assignment.",
+  "config.idleTimeoutMinutes": "Minutes of inactivity before stopping the OpenCode server."
+}

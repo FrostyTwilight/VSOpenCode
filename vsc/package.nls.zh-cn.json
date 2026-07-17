@@ -1,0 +1,8 @@
+{
+  "command.openToolWindow": "打开工具窗口",
+  "viewContainer.title": "OpenCode",
+  "view.toolView": "OpenCode",
+  "config.opencodePath": "opencode 可执行文件路径。留空则自动检测。",
+  "config.serverPort": "OpenCode 服务器端口。设为 0 则自动分配端口。",
+  "config.idleTimeoutMinutes": "停止 OpenCode 服务器前的空闲分钟数。"
+}

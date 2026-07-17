@@ -1,0 +1,89 @@
+{
+  "name": "vscode-opencode",
+  "displayName": "OpenCode",
+  "description": "Integrate OpenCode into VS Code",
+  "version": "0.1.0",
+  "publisher": "hklab",
+  "license": "MIT",
+  "repository": "https://github.com/DreamBoxSpy/VSOpenCode",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "vscode-opencode.openToolWindow",
+        "title": "%command.openToolWindow%",
+        "category": "OpenCode"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "vscode-opencode",
+          "title": "%viewContainer.title%",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "vscode-opencode": [
+        {
+          "type": "webview",
+          "id": "vscode-opencode.toolView",
+          "name": "%view.toolView%"
+        }
+      ]
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "vscode-opencode.openToolWindow"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "vscode-opencode.openToolWindow",
+          "when": "view == vscode-opencode.toolView",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "OpenCode",
+      "properties": {
+        "vscode-opencode.opencodePath": {
+          "type": "string",
+          "default": "",
+          "description": "%config.opencodePath%"
+        },
+        "vscode-opencode.serverPort": {
+          "type": "number",
+          "default": 0,
+          "description": "%config.serverPort%"
+        },
+        "vscode-opencode.idleTimeoutMinutes": {
+          "type": "number",
+          "default": 5,
+          "description": "%config.idleTimeoutMinutes%"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "node esbuild.config.js",
+    "watch": "node esbuild.config.js --watch",
+    "package": "vsce package --no-dependencies",
+    "lint": "biome check src/"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "*",
+    "@types/node": "^26.1.1",
+    "@types/vscode": "*",
+    "@vscode/vsce": "*",
+    "esbuild": "*",
+    "typescript": "^7.0.2"
+  }
+}
